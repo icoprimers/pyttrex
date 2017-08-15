@@ -8,24 +8,41 @@ Show what the library does as concisely as possible, developers should be able t
 
 ## Motivation
 
-A short description of the motivation behind the creation and maintenance of the project. This should explain **why** the project exists.
+I made this repository to centralize my Bittrex code better and store them in a structured way. Often these are scripts made out of curiousity and experiment, some of the are useful and others are not. I want to put all of these in a package so I can use them in future projects.
 
 ## Installation
 
-Provide code examples and explanations of how to get the project.
+Some of these examples require [TALIB](http://ta-lib.org) which can be hard to install for your specific python version. I included a docker-compose file that builds the container and mounts the source code in case you can't get it to work locally.
 
-## API Reference
+## Bittrex API Reference
 
-Depending on the size of the project, if it is small and simple enough the reference docs can be added to the README. For medium size to larger projects it is important to at least provide a link to where the API reference docs live.
+The Bittrex API has different versions.
+
+[Standard API (V1.1)](https://www.bittrex.com/Home/Api)
+1. Used for placing orders, viewing account information - private authenticated actions
+1. Useful for collecting big market overviews
+1. Market information is lagged and has overhead because of the HTTP post mechanisms
+
+[Market API (V2)](https://bittrex.com/Api/v2.0/pub/market/GetTicks?marketName=BTC-WAVES&tickInterval=ThirtyMin)
+1. Undocumented API
+1. Useful for collecting specific coin data
+1. Sends back OHLC+V data in intervals: OneMin, FiveMin, ThirtyMin
+
+[WebSocket API (SignalR)](http://socket.bittrex.com/signalr)
+1. Undocumented API - written in SignalR
+1. Collecting delta's of the market: SubscribeToExchangeDeltas()
+1. Ticker updates: SubscribeToExchangeDeltas(['BTC-ETH','BTC-ZEC'])
 
 ## Tests
 
-Describe and show how to run the tests with code examples.
+lol
 
 ## Contributors
 
-Let people know how they can dive into the project, include important links to things like issue trackers, irc, twitter accounts if applicable.
+To contribute or get in touch with me or my peers contact me on [Telegram](http://t.me/cryptofud)
+
 
 ## License
 
 A short snippet describing the license (MIT, Apache, etc.)
+
