@@ -26,7 +26,7 @@ The Bittrex API has different versions.
 [Market API (V2)](https://bittrex.com/Api/v2.0/pub/market/GetTicks?marketName=BTC-WAVES&tickInterval=ThirtyMin)
 1. Undocumented API
 1. Useful for collecting specific coin data
-1. Sends back OHLC+V data in intervals: OneMin, FiveMin, ThirtyMin
+1. Sends back OHLC+V data in intervals: OneMin, FiveMin, ThirtyMin, Hour, Day
 
 [WebSocket API (SignalR)](http://socket.bittrex.com/signalr)
 1. Undocumented API - written in SignalR

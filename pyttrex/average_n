@@ -1,0 +1,144 @@
+#!/home/rudynutbey/pump200/env/bin/python
+import sys, csv
+from pyttrex import ohlc, market_summaries
+import urllib.parse
+from urllib.request import Request, urlopen
+
+from queue import Queue
+from threading import Thread
+
+from tabulate import tabulate
+from collections import deque
+
+from itertools import zip_longest
+DEBUG = False
+inputs = []
+
+def group_candles(window, candles):
+
+    def grouper(n, iterable, fillvalue=None):
+        "grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx"
+        args = [iter(iterable)] * n
+        return zip_longest(fillvalue=fillvalue, *args)
+    start = len(candles['O']) % window
+
+    candles_ohlc = {
+        'O': list(grouper(window, candles['O'][start:])), 'H': list(grouper(window, candles['H'][start:])),
+        'L': list(grouper(window, candles['L'][start:])), 'C': list(grouper(window, candles['C'][start:])),
+        'V': list(grouper(window, candles['V'][start:])), 'T': list(grouper(window, candles['T'][start:])),
+        'BV': list(grouper(window, candles['BV'][start:]))
+    }
+    return candles_ohlc
+
+def merge_candles(limit, candles_grouped):
+    for i in range(0, limit):
+        pos = (0 - limit) + i
+        candle = {
+            'O': candles_grouped['O'][pos][0],  'H': max(candles_grouped['H'][pos]),
+            'L': min(candles_grouped['L'][pos]),'C': candles_grouped['C'][pos][-1],
+            'T': candles_grouped['T'][pos][-1], 'V': sum(candles_grouped['V'][pos]),
+            'BV': sum(candles_grouped['BV'][pos])
+        }
+        yield candle
+
+def worker(candlesize):
+    while True:
+        item = q.get()
+        result = ohlc(item, candlesize)
+        try:
+            if result['candles']:
+                inputs.append(result)
+        except:
+            print("cant talk to trex for coin {0}".format(item))
+        finally:
+            q.task_done()
+
+if __name__ == '__main__':
+    winners = {'high': [], 'up': []}
+    q = Queue()
+    sizes = [ 'OneMin', 'FiveMin', 'ThirtyMin', 'Hour', 'Day' ]
+    candlesize = 'OneMin'
+    window = 19
+    limit = 40
+    ma_tr_limit = 10
+    for i in range(8):
+        t = Thread(target=worker, args=(candlesize,))
+        t.daemon = True
+        t.start()
+    market = market_summaries(['BTC'], filtered=True)
+    for item in market:
+        q.put(item)
+        if DEBUG: break
+    q.join()
+
+    tables = []
+    for coin in inputs:
+        true_range = {'absolute': deque(maxlen=ma_tr_limit), 'relative': deque(maxlen=ma_tr_limit)}
+        candles_ohlc = group_candles(window, coin['candles'])
+        candles = merge_candles(limit=limit, candles_grouped=candles_ohlc)
+        c = next(candles)
+        table = [[ c['T'], c['O'], c['H'], c['L'], c['C'], None, None, None, None, None, None]]
+        headers = [ coin['name'], 'open', 'high', 'low', 'close', 'BV', 'tr 1', 'tr 2', 'tr 3', 'ATR','{0} maATR'.format(ma_tr_limit), '{0} maRTR'.format(ma_tr_limit) ]
+        while True:
+            try:
+                c, prev_c = next(candles), c
+                T, O, H, L, C, BV = c['T'], c['O'], c['H'], c['L'], c['C'], c['BV']
+                tr = [abs(H - L), abs(prev_c['C'] - H), abs(prev_c['C'] - L)]
+                absolute_tr = max(tr)
+                relative_tr = (1 / C) * absolute_tr
+                true_range['absolute'].append(absolute_tr)
+                true_range['relative'].append(relative_tr)
+                ma_atr = sum(true_range['absolute']) / ma_tr_limit if ma_tr_limit == len(true_range['absolute']) else None
+                ma_rtr = sum(true_range['relative']) / ma_tr_limit if ma_tr_limit == len(true_range['relative']) else None
+                table.append([T, O, H, L, C, BV, tr[0], tr[1], tr[2], absolute_tr, ma_atr, ma_rtr])
+            except StopIteration:
+                direction = ''
+                high = max(table, key=lambda x: x[4])
+                if high[0] == table[-1][4]:
+                  winners['high'].append(coin['name'])
+                  tables.append([ coin['name'], sum([table[-1][-1], table[-2][-1]]), direction])
+                elif table[-1][-1] >= table[-2][-1] >= table[-3][-1] and table[-1][4] > table[-2][4]:
+                  if sum([table[-1][5], table[-2][5], table[-3][5]]) / 3 > sum([table[-3][5], table[-4][5], table[-5][5]]) / 3 or table[-2][4] > sum([table[-3][4], table[-4][4] ]) / 2:
+                      winners['up'].append(coin['name'])
+                      tables.append([ coin['name'], sum([table[-1][-1], table[-2][-1]]), direction])
+                break
+            except:
+              print("failed {0}".format(coin['name']))
+
+    print(winners)
+    try:
+        with open('output.csv', newline='') as csvfile:
+            reader = csv.reader(csvfile)
+            output = [row[0] for row in reader]
+    except:
+      output = []
+      pass
+
+    try:
+      with open('output.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=' ')
+        rows = winners['high'] + winners['up']
+        for r in rows:
+          writer.writerow([r])
+    except:
+      raise KeyError("cant write the csv")
+    message = ''
+    chatids = [ -1001131392206  ]#, -1001127250144 , -1001114511736 ]
+    tgurl = 'https://api.telegram.org/bot321368678:AAG51bIBetB1dGQfi9e-HhZHv3oTa4tPC7s/sendMessage?chat_id={0}&text={1}'
+    trexurl = '{0}: https://bittrex.com/Market/Index?MarketName={2} ({1:.3f} {3}) \n'
+    tablesort = sorted(tables, key=lambda x: x[1], reverse=True)
+    for x in tablesort:
+      if x[0] in winners['high']:
+        state = 'HIGH' if x[0] not in output else 'HIGHEST'
+      elif x[0] in winners['up']:
+        state = 'REVERSAL' if x[0] not in output else 'INCREASE'
+      message+=trexurl.format(state, x[1], x[0], x[2]) if state else ''
+
+    try:
+      encoded = urllib.parse.quote_plus(message) if message else False
+    except:
+      raise KeyError("cant encode url")
+
+    for i in chatids:
+      req = Request(tgurl.format(i, encoded)) if encoded else None
+      reply = urlopen(req) if req else None
