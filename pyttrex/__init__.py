@@ -2,8 +2,10 @@ import numpy as np
 import pandas as pd
 from urllib.request import urlopen, Request
 from multiprocessing.pool import ThreadPool
+import collections
 import json
 import time, random
+import datetime
 
 def ohlc(*args, **kwargs):
     coin = args[0]
@@ -31,13 +33,24 @@ def ohlc(*args, **kwargs):
     dataframe = pd.DataFrame(candles) if candles else None
     if dataframe is not None:
         dataframe = dataframe.set_index(pd.to_datetime(dataframe['time']))
-        return {'name': coin, 'data': dataframe }
-    else:
-        return None
+        if datetime.datetime(2017, 7, 1) in dataframe.index.to_pydatetime():
+            return {'name': coin, 'data': dataframe['2017-01':] }
+
+def ohlc_context(maxlen):
+    '''this context is used for backtesting
+    I use this to append every candle bar untill it is full
+    so the testing process has stuff like 24 hour high without looking in advance'''
+    context = {
+        'open': collections.deque(maxlen=maxlen),
+        'high': collections.deque(maxlen=maxlen),
+        'low': collections.deque(maxlen=maxlen),
+        'close': collections.deque(maxlen=maxlen),
+        'volume': collections.deque(maxlen=maxlen),
+        'time': collections.deque(maxlen=maxlen)
+    }
+    return context
 
 def market_summaries(coins=['BTC','ETH'], filtered=False):
-    from urllib.request import Request, urlopen
-    import json
     url = Request('https://bittrex.com/api/v1.1/public/getmarketsummaries')
     result = json.loads(urlopen(url).read().decode())
     exceptionlist = [ 'WAVES' ] #''LSK', 'BNT', 'PIVX', 'LBC', 'WINGS', 'PTOY', 'NMR', 'XEM', 'WAVES', 'BTS', 'SC', 'DASH', 'FCT', 'SNT', 'STORJ', 'GBYTE', '1ST', 'DGB', 'ARDR', 'NXT', 'VIA', 'SEQ' ]
